@@ -1,5 +1,5 @@
 import os
-
+import sys
 from dotenv import load_dotenv # pyright: ignore[reportMissingImports]
 
 from google import genai
@@ -7,6 +7,7 @@ from google.genai import types # pyright: ignore[reportMissingImports]
 import argparse
 from prompts import *
 from call_function import *
+
 
 
 
@@ -24,28 +25,59 @@ def main():
     print(args)
     # Now we can access `args.user_prompt`
 
+    
     messages = [types.Content(role="user", parts=[types.Part(text=args.user_prompt)])]
-
     
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-    model='gemini-2.5-flash', contents=messages,
-    config=types.GenerateContentConfig(tools=[available_functions],system_instruction=system_prompt)
-    
-    )
-    
+    func_results = []
 
-    metadata = response.usage_metadata
-    if metadata == None:
-        raise RuntimeError("Response metadata was null. Response invalid.")
-    if args.verbose == True:
-        print(f"User prompt: {args.user_prompt}\nPrompt tokens: {metadata.prompt_token_count}\nResponse tokens: {metadata.candidates_token_count}")
-    
-    if response.function_calls != None:
-        for function_call in response.function_calls:
-            print(f"Calling function: {function_call.name}({function_call.args})")
+    for i in range(20): #Original: gemini-2.5-flash
+        
 
-    print(response.text)
+        response = client.models.generate_content(
+        model='gemini-2.5-flash', contents=messages, 
+        config=types.GenerateContentConfig(tools=[available_functions],system_instruction=system_prompt),
+        
+        )
+        
+
+        metadata = response.usage_metadata
+        if metadata == None:
+            raise RuntimeError("Response metadata was null. Response invalid.")
+        if args.verbose == True:
+            print(f"User prompt: {args.user_prompt}\nPrompt tokens: {metadata.prompt_token_count}\nResponse tokens: {metadata.candidates_token_count}")
+
+        if response.candidates != None:
+            
+            for candidate in response.candidates:
+                messages.append(candidate.content)
+        
+        if response.function_calls != None:
+            for function_call in response.function_calls:
+                #print(f"Calling function: {function_call.name}({function_call.args})")
+                function_call_result = call_function(function_call,args.verbose)
+                if function_call_result.parts == None or function_call_result.parts == []:
+                    raise Exception("result has no parts.")
+                
+                func_response = function_call_result.parts[0].function_response
+                if func_response == None:
+                    raise Exception("function response is None")
+                if func_response.response == None:
+                    raise Exception("response field of function response is None")
+        
+                
+                func_results.append(function_call_result.parts[0])
+                if args.verbose:
+                    print(f"-> {func_response.response}")
+        else:
+            print(response.text)
+            return
+
+        messages.append(types.Content(role="user", parts=func_results))
+        print(response.text)
+    
+    print("Maximum number of iterations reached")
+    sys.exit(1)
 
 
 
