@@ -5,6 +5,9 @@ from dotenv import load_dotenv # pyright: ignore[reportMissingImports]
 from google import genai
 from google.genai import types # pyright: ignore[reportMissingImports]
 import argparse
+from prompts import *
+from call_function import *
+
 
 
 
@@ -26,7 +29,10 @@ def main():
     
     client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
-    model='gemini-2.5-flash', contents=messages)
+    model='gemini-2.5-flash', contents=messages,
+    config=types.GenerateContentConfig(tools=[available_functions],system_instruction=system_prompt)
+    
+    )
     
 
     metadata = response.usage_metadata
@@ -35,7 +41,9 @@ def main():
     if args.verbose == True:
         print(f"User prompt: {args.user_prompt}\nPrompt tokens: {metadata.prompt_token_count}\nResponse tokens: {metadata.candidates_token_count}")
     
-    
+    if response.function_calls != None:
+        for function_call in response.function_calls:
+            print(f"Calling function: {function_call.name}({function_call.args})")
 
     print(response.text)
 
